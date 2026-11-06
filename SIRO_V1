@@ -1,0 +1,460 @@
+#include <xc.h>
+#include <stdlib.h>
+
+// CONFIG1L
+#pragma config PLLDIV = 1       // PLL Prescaler Selection bits (No prescale (4 MHz oscillator input drives PLL directly))
+#pragma config CPUDIV = OSC1_PLL2// System Clock Postscaler Selection bits ([Primary Oscillator Src: /1][96 MHz PLL Src: /2])
+#pragma config USBDIV = 1       // USB Clock Selection bit (used in Full-Speed USB mode only; UCFG:FSEN = 1) (USB clock source comes directly from the primary oscillator block with no postscale)
+
+// CONFIG1H
+#pragma config FOSC = HS        // Oscillator Selection bits (HS oscillator (HS))
+#pragma config FCMEN = OFF      // Fail-Safe Clock Monitor Enable bit (Fail-Safe Clock Monitor disabled)
+#pragma config IESO = OFF       // Internal/External Oscillator Switchover bit (Oscillator Switchover mode disabled)
+
+// CONFIG2L
+#pragma config PWRT = OFF       // Power-up Timer Enable bit (PWRT disabled)
+#pragma config BOR = OFF        // Brown-out Reset Enable bits (Brown-out Reset disabled in hardware and software)
+#pragma config BORV = 3         // Brown-out Reset Voltage bits (Minimum setting 2.05V)
+#pragma config VREGEN = OFF     // USB Voltage Regulator Enable bit (USB voltage regulator disabled)
+
+// CONFIG2H
+#pragma config WDT = OFF        // Watchdog Timer Enable bit (WDT disabled (control is placed on the SWDTEN bit))
+#pragma config WDTPS = 32768    // Watchdog Timer Postscale Select bits (1:32768)
+
+// CONFIG3H
+#pragma config CCP2MX = ON      // CCP2 MUX bit (CCP2 input/output is multiplexed with RC1)
+#pragma config PBADEN = OFF     // PORTB A/D Enable bit (PORTB<4:0> pins are configured as digital I/O on Reset)
+#pragma config LPT1OSC = OFF    // Low-Power Timer 1 Oscillator Enable bit (Timer1 configured for higher power operation)
+#pragma config MCLRE = ON       // MCLR Pin Enable bit (MCLR pin enabled; RE3 input pin disabled)
+
+// CONFIG4L
+#pragma config STVREN = OFF     // Stack Full/Underflow Reset Enable bit (Stack full/underflow will not cause Reset)
+#pragma config LVP = OFF        // Single-Supply ICSP Enable bit (Single-Supply ICSP disabled)
+#pragma config ICPRT = OFF      // Dedicated In-Circuit Debug/Programming Port (ICPORT) Enable bit (ICPORT disabled)
+#pragma config XINST = OFF      // Extended Instruction Set Enable bit (Instruction set extension and Indexed Addressing mode disabled (Legacy mode))
+
+// CONFIG5L
+#pragma config CP0 = OFF        // Code Protection bit (Block 0 (000800-001FFFh) is not code-protected)
+#pragma config CP1 = OFF        // Code Protection bit (Block 1 (002000-003FFFh) is not code-protected)
+#pragma config CP2 = OFF        // Code Protection bit (Block 2 (004000-005FFFh) is not code-protected)
+#pragma config CP3 = OFF        // Code Protection bit (Block 3 (006000-007FFFh) is not code-protected)
+
+// CONFIG5H
+#pragma config CPB = OFF        // Boot Block Code Protection bit (Boot block (000000-0007FFh) is not code-protected)
+#pragma config CPD = OFF        // Data EEPROM Code Protection bit (Data EEPROM is not code-protected)
+
+// CONFIG6L
+#pragma config WRT0 = OFF       // Write Protection bit (Block 0 (000800-001FFFh) is not write-protected)
+#pragma config WRT1 = OFF       // Write Protection bit (Block 1 (002000-003FFFh) is not write-protected)
+#pragma config WRT2 = OFF       // Write Protection bit (Block 2 (004000-005FFFh) is not write-protected)
+#pragma config WRT3 = OFF       // Write Protection bit (Block 3 (006000-007FFFh) is not write-protected)
+
+// CONFIG6H
+#pragma config WRTC = OFF       // Configuration Register Write Protection bit (Configuration registers (300000-3000FFh) are not write-protected)
+#pragma config WRTB = OFF       // Boot Block Write Protection bit (Boot block (000000-0007FFh) is not write-protected)
+#pragma config WRTD = OFF       // Data EEPROM Write Protection bit (Data EEPROM is not write-protected)
+
+// CONFIG7L
+#pragma config EBTR0 = OFF      // Table Read Protection bit (Block 0 (000800-001FFFh) is not protected from table reads executed in other blocks)
+#pragma config EBTR1 = OFF      // Table Read Protection bit (Block 1 (002000-003FFFh) is not protected from table reads executed in other blocks)
+#pragma config EBTR2 = OFF      // Table Read Protection bit (Block 2 (004000-005FFFh) is not protected from table reads executed in other blocks)
+#pragma config EBTR3 = OFF      // Table Read Protection bit (Block 3 (006000-007FFFh) is not protected from table reads executed in other blocks)
+
+// CONFIG7H
+#pragma config EBTRB = OFF      // Boot Block Table Read Protection bit (Boot block (000000-0007FFh) is not protected from table reads executed in other blocks)
+
+#define _XTAL_FREQ 20000000
+#define BUZZER RC2
+
+int modo = 0; 
+int cambio = 0;
+int led_act = 0;   
+int led_viejo = 0;
+int hay_led_viejo = 0;
+int led1 = 0;
+int led2 = 0;
+int error = 0;
+
+void apagar_leds(void) {
+    PORTD = 0x00;
+    RC0 = 0;
+    RC1 = 0;
+    RC6 = 0;
+    RC7 = 0;
+    BUZZER = 0;
+}
+
+void sonido_bien(void) {
+    for (int i = 0; i < 30; i = i + 1) {
+        BUZZER = 1;
+        __delay_ms(1);
+        BUZZER = 0;
+        __delay_ms(1);
+    }
+
+    __delay_ms(30);
+
+    for (int i = 0; i < 40; i = i + 1) {
+        BUZZER = 1;
+        __delay_ms(1);
+        BUZZER = 0;
+        __delay_ms(1);
+    }
+}
+
+void sonido_mal(void) {
+    for (int i = 0; i < 25; i = i + 1) {
+        BUZZER = 1;
+        __delay_ms(3);
+        BUZZER = 0;
+        __delay_ms(3);
+    }
+
+    __delay_ms(20);
+
+    for (int i = 0; i < 25; i = i + 1) {
+        BUZZER = 1;
+        __delay_ms(4);
+        BUZZER = 0;
+        __delay_ms(4);
+    }
+}
+
+void config_int(void) {
+    INTEDG0 = 0;    
+    INT0IF = 0;     
+    INT0IE = 1;     
+    GIE = 1;        
+}
+
+void __interrupt() ISR(void) {
+    if (INT0IF == 1) {
+        if (RB0 == 0) {
+            modo = modo + 1;
+            
+            if (modo > 3) {
+                modo = 0;
+            }
+            cambio = 1;
+        }
+        INT0IF = 0;
+    }
+}
+
+void prender_led(int num) {
+    switch(num) {
+        case 0:  RD0 = 1; break;
+        case 1:  RD1 = 1; break;
+        case 2:  RD2 = 1; break;
+        case 3:  RD3 = 1; break;
+        case 4:  RD4 = 1; break;
+        case 5:  RD5 = 1; break;
+        case 6:  RD6 = 1; break;
+        case 7:  RD7 = 1; break;
+        case 8:  RC0 = 1; break;
+        case 9:  RC1 = 1; break;
+        case 10: RC6 = 1; break;
+        case 11: RC7 = 1; break;
+    }
+}
+
+void apagar_led(int num) {
+    switch(num) {
+        case 0:  RD0 = 0; break;
+        case 1:  RD1 = 0; break;
+        case 2:  RD2 = 0; break;
+        case 3:  RD3 = 0; break;
+        case 4:  RD4 = 0; break;
+        case 5:  RD5 = 0; break;
+        case 6:  RD6 = 0; break;
+        case 7:  RD7 = 0; break;
+        case 8:  RC0 = 0; break;
+        case 9:  RC1 = 0; break;
+        case 10: RC6 = 0; break;
+        case 11: RC7 = 0; break;
+    }
+}
+
+int leer_boton(int num) {
+    switch(num) {
+        case 0:  return (RB1 == 0);
+        case 1:  return (RB2 == 0);
+        case 2:  return (RB3 == 0);
+        case 3:  return (RB4 == 0);
+        case 4:  return (RB5 == 0);
+        case 5:  return (RB6 == 0);
+        case 6:  return (RB7 == 0);
+        case 7:  return (RA0 == 0);
+        case 8:  return (RA1 == 0);
+        case 9:  return (RA2 == 0);
+        case 10: return (RA3 == 0);
+        case 11: return (RA5 == 0);
+    }
+    return 0;
+}
+
+void main(void) {
+
+    ADCON1 = 0x0F;
+
+    TRISB0 = 1;
+    TRISB1 = 1;
+    TRISB2 = 1;
+    TRISB3 = 1;
+    TRISB4 = 1;
+    TRISB5 = 1;
+    TRISB6 = 1;
+    TRISB7 = 1;
+
+    TRISA0 = 1;
+    TRISA1 = 1;
+    TRISA2 = 1;
+    TRISA3 = 1;
+    TRISA5 = 1;
+
+    TRISD0 = 0;
+    TRISD1 = 0;
+    TRISD2 = 0;
+    TRISD3 = 0;
+    TRISD4 = 0;
+    TRISD5 = 0;
+    TRISD6 = 0;
+    TRISD7 = 0;
+
+    TRISC0 = 0;
+    TRISC1 = 0;
+    TRISC2 = 0;
+    TRISC6 = 0;
+    TRISC7 = 0;
+
+    apagar_leds();
+    config_int();
+
+    while (1) {
+
+        // Modo 0
+        if (modo == 0) {
+            apagar_leds();
+            cambio = 0;
+
+            while (modo == 0 && cambio == 0) {
+            }
+        }
+
+        // Modo 1
+        if (modo == 1) {
+            cambio = 0;
+            apagar_leds();
+            hay_led_viejo = 0;
+
+            while (modo == 1 && cambio == 0) {
+
+                do {
+                    led_act = rand() % 12;
+                } while (hay_led_viejo == 1 && led_act == led_viejo);
+
+                prender_led(led_act);
+
+                while (modo == 1 && cambio == 0) {
+
+                    if (leer_boton(led_act) == 1) {
+                        apagar_led(led_act);
+                        sonido_bien();
+                        led_viejo = led_act;
+                        hay_led_viejo = 1;
+                        break;
+                    }
+
+                    for (int vuelta = 0; vuelta < 12; vuelta = vuelta + 1) {
+                        int prendido = 0;
+
+                        if (vuelta == led_act) {
+                            prendido = 1;
+                        }
+
+                        if (hay_led_viejo == 1) {
+                            if (vuelta == led_viejo) {
+                                if (leer_boton(led_viejo) == 1) {
+                                    prendido = 1;
+                                } else {
+                                    hay_led_viejo = 0;
+                                }
+                            }
+                        }
+
+                        if (prendido == 0) {
+                            if (leer_boton(vuelta) == 1) {
+                                sonido_mal();
+                                while (leer_boton(vuelta) == 1 && cambio == 0);
+                            }
+                        }
+                    }
+                }
+            }
+
+            apagar_leds();
+        }
+
+        // Modo 2
+        if (modo == 2) {
+            cambio = 0;
+            apagar_leds();
+
+            while (modo == 2 && cambio == 0) {
+
+                led1 = rand() % 12;
+                prender_led(led1);
+                hay_led_viejo = 0;
+
+                while (modo == 2 && cambio == 0) {
+
+                    if (leer_boton(led1) == 1) {
+                        break;
+                    }
+
+                    for (int vuelta = 0; vuelta < 12; vuelta = vuelta + 1) {
+                        int prendido = 0;
+
+                        if (vuelta == led1) {
+                            prendido = 1;
+                        }
+
+                        if (prendido == 0) {
+                            if (leer_boton(vuelta) == 1) {
+                                sonido_mal();
+                                while (leer_boton(vuelta) == 1 && cambio == 0);
+                            }
+                        }
+                    }
+                }
+
+                while (modo == 2 && cambio == 0) {
+                    
+                    do {
+                        led2 = rand() % 12;
+                    } while (led2 == led1);
+
+                    prender_led(led2);
+                    error = 0;
+
+                    while (modo == 2 && cambio == 0) {
+
+                        // Si suelta led1 antes de presionar led2
+                        if (leer_boton(led1) == 0) {
+                            sonido_mal();
+                            apagar_led(led1);
+                            apagar_led(led2);
+                            while (leer_boton(led2) == 1 && cambio == 0);
+                            error = 1;
+                            break;
+                        }
+
+                        // Si presiona led2 correctamente sosteniendo led1
+                        if (leer_boton(led2) == 1) {
+                            apagar_led(led1);
+                            sonido_bien();
+                            led_viejo = led1;
+                            hay_led_viejo = 1;
+                            led1 = led2;
+                            break;
+                        }
+
+                        // Si presiona un boton equivocado
+                        for (int vuelta = 0; vuelta < 12; vuelta = vuelta + 1) {
+                            int prendido = 0;
+
+                            if (vuelta == led1) {
+                                prendido = 1;
+                            }
+                            if (vuelta == led2) {
+                                prendido = 1;
+                            }
+                            if (hay_led_viejo == 1) {
+                                if (vuelta == led_viejo) {
+                                    if (leer_boton(led_viejo) == 1) {
+                                        prendido = 1;
+                                    } else {
+                                        hay_led_viejo = 0;
+                                    }
+                                }
+                            }
+
+                            if (prendido == 0) {
+                                if (leer_boton(vuelta) == 1) {
+                                    sonido_mal();
+                                    apagar_led(led1);
+                                    apagar_led(led2);
+                                    while (leer_boton(vuelta) == 1 && cambio == 0);
+                                    while (leer_boton(led1) == 1 && cambio == 0);
+                                    error = 1;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (error == 1) break;
+                    }
+
+                    if (error == 1) break;
+                }
+            }
+
+            apagar_leds();
+        }
+
+        // Modo 3
+        if (modo == 3) {
+            cambio = 0;
+            apagar_leds();
+            hay_led_viejo = 0;
+
+            while (modo == 3 && cambio == 0) {
+
+                do {
+                    led_act = rand() % 8;
+                } while (hay_led_viejo == 1 && led_act == led_viejo);
+
+                prender_led(led_act);
+
+                while (modo == 3 && cambio == 0) {
+
+                    if (leer_boton(led_act) == 1) {
+                        apagar_led(led_act);
+                        sonido_bien();
+                        led_viejo = led_act;
+                        hay_led_viejo = 1;
+                        break;
+                    }
+
+                    for (int vuelta = 0; vuelta < 12; vuelta = vuelta + 1) {
+                        int prendido = 0;
+
+                        if (vuelta == led_act) {
+                            prendido = 1;
+                        }
+
+                        if (hay_led_viejo == 1) {
+                            if (vuelta == led_viejo) {
+                                if (leer_boton(led_viejo) == 1) {
+                                    prendido = 1;
+                                } else {
+                                    hay_led_viejo = 0;
+                                }
+                            }
+                        }
+
+                        if (prendido == 0) {
+                            if (leer_boton(vuelta) == 1) {
+                                sonido_mal();
+                                while (leer_boton(vuelta) == 1 && cambio == 0);
+                            }
+                        }
+                    }
+                }
+            }
+
+            apagar_leds();
+        }
+
+    }
+}
