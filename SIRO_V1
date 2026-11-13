@@ -1,123 +1,172 @@
 #include <xc.h>
 #include <stdlib.h>
 
-// CONFIG1L
-#pragma config PLLDIV = 1       // PLL Prescaler Selection bits (No prescale (4 MHz oscillator input drives PLL directly))
-#pragma config CPUDIV = OSC1_PLL2// System Clock Postscaler Selection bits ([Primary Oscillator Src: /1][96 MHz PLL Src: /2])
-#pragma config USBDIV = 1       // USB Clock Selection bit (used in Full-Speed USB mode only; UCFG:FSEN = 1) (USB clock source comes directly from the primary oscillator block with no postscale)
+// Configuración de fusibles PIC18F4550 (Cristal 4 MHz)
+#pragma config PLLDIV = 1
+#pragma config CPUDIV = OSC1_PLL2
+#pragma config USBDIV = 1
+#pragma config FOSC = HS
+#pragma config FCMEN = OFF
+#pragma config IESO = OFF
+#pragma config PWRT = OFF
+#pragma config BOR = OFF
+#pragma config VREGEN = OFF
+#pragma config WDT = OFF
+#pragma config PBADEN = OFF
+#pragma config MCLRE = ON
+#pragma config LVP = OFF
+#pragma config XINST = OFF
 
-// CONFIG1H
-#pragma config FOSC = HS        // Oscillator Selection bits (HS oscillator (HS))
-#pragma config FCMEN = OFF      // Fail-Safe Clock Monitor Enable bit (Fail-Safe Clock Monitor disabled)
-#pragma config IESO = OFF       // Internal/External Oscillator Switchover bit (Oscillator Switchover mode disabled)
+#define _XTAL_FREQ 4000000
 
-// CONFIG2L
-#pragma config PWRT = OFF       // Power-up Timer Enable bit (PWRT disabled)
-#pragma config BOR = OFF        // Brown-out Reset Enable bits (Brown-out Reset disabled in hardware and software)
-#pragma config BORV = 3         // Brown-out Reset Voltage bits (Minimum setting 2.05V)
-#pragma config VREGEN = OFF     // USB Voltage Regulator Enable bit (USB voltage regulator disabled)
-
-// CONFIG2H
-#pragma config WDT = OFF        // Watchdog Timer Enable bit (WDT disabled (control is placed on the SWDTEN bit))
-#pragma config WDTPS = 32768    // Watchdog Timer Postscale Select bits (1:32768)
-
-// CONFIG3H
-#pragma config CCP2MX = ON      // CCP2 MUX bit (CCP2 input/output is multiplexed with RC1)
-#pragma config PBADEN = OFF     // PORTB A/D Enable bit (PORTB<4:0> pins are configured as digital I/O on Reset)
-#pragma config LPT1OSC = OFF    // Low-Power Timer 1 Oscillator Enable bit (Timer1 configured for higher power operation)
-#pragma config MCLRE = ON       // MCLR Pin Enable bit (MCLR pin enabled; RE3 input pin disabled)
-
-// CONFIG4L
-#pragma config STVREN = OFF     // Stack Full/Underflow Reset Enable bit (Stack full/underflow will not cause Reset)
-#pragma config LVP = OFF        // Single-Supply ICSP Enable bit (Single-Supply ICSP disabled)
-#pragma config ICPRT = OFF      // Dedicated In-Circuit Debug/Programming Port (ICPORT) Enable bit (ICPORT disabled)
-#pragma config XINST = OFF      // Extended Instruction Set Enable bit (Instruction set extension and Indexed Addressing mode disabled (Legacy mode))
-
-// CONFIG5L
-#pragma config CP0 = OFF        // Code Protection bit (Block 0 (000800-001FFFh) is not code-protected)
-#pragma config CP1 = OFF        // Code Protection bit (Block 1 (002000-003FFFh) is not code-protected)
-#pragma config CP2 = OFF        // Code Protection bit (Block 2 (004000-005FFFh) is not code-protected)
-#pragma config CP3 = OFF        // Code Protection bit (Block 3 (006000-007FFFh) is not code-protected)
-
-// CONFIG5H
-#pragma config CPB = OFF        // Boot Block Code Protection bit (Boot block (000000-0007FFh) is not code-protected)
-#pragma config CPD = OFF        // Data EEPROM Code Protection bit (Data EEPROM is not code-protected)
-
-// CONFIG6L
-#pragma config WRT0 = OFF       // Write Protection bit (Block 0 (000800-001FFFh) is not write-protected)
-#pragma config WRT1 = OFF       // Write Protection bit (Block 1 (002000-003FFFh) is not write-protected)
-#pragma config WRT2 = OFF       // Write Protection bit (Block 2 (004000-005FFFh) is not write-protected)
-#pragma config WRT3 = OFF       // Write Protection bit (Block 3 (006000-007FFFh) is not write-protected)
-
-// CONFIG6H
-#pragma config WRTC = OFF       // Configuration Register Write Protection bit (Configuration registers (300000-3000FFh) are not write-protected)
-#pragma config WRTB = OFF       // Boot Block Write Protection bit (Boot block (000000-0007FFh) is not write-protected)
-#pragma config WRTD = OFF       // Data EEPROM Write Protection bit (Data EEPROM is not write-protected)
-
-// CONFIG7L
-#pragma config EBTR0 = OFF      // Table Read Protection bit (Block 0 (000800-001FFFh) is not protected from table reads executed in other blocks)
-#pragma config EBTR1 = OFF      // Table Read Protection bit (Block 1 (002000-003FFFh) is not protected from table reads executed in other blocks)
-#pragma config EBTR2 = OFF      // Table Read Protection bit (Block 2 (004000-005FFFh) is not protected from table reads executed in other blocks)
-#pragma config EBTR3 = OFF      // Table Read Protection bit (Block 3 (006000-007FFFh) is not protected from table reads executed in other blocks)
-
-// CONFIG7H
-#pragma config EBTRB = OFF      // Boot Block Table Read Protection bit (Boot block (000000-0007FFh) is not protected from table reads executed in other blocks)
-
-#define _XTAL_FREQ 20000000
-#define BUZZER RC2
-
+// Variables globales del juego
 int modo = 0; 
-int cambio = 0;
-int led_act = 0;   
+int boton_modo = 0;
+int saludo_dado = 0; // Controla que "Hola Elias" suene solo la primera vez
+int led_act = 0;    
 int led_viejo = 0;
 int hay_led_viejo = 0;
 int led1 = 0;
 int led2 = 0;
-int error = 0;
+int led_anterior = 0;
+int hay_led_anterior = 0;
+int racha = 0;
+
+// ==========================================================
+// COMUNICACIÓN SERIAL BÁSICA (PIN RC6 -> RX DEL DFPLAYER)
+// ==========================================================
+
+void iniciar_serial_basico(void) {
+    TRISC6 = 1;
+    TRISC7 = 1;
+    TXSTA = 0x24; // Activa transmisión
+    RCSTA = 0x90; // Activa puerto serial en RC6
+    SPBRG = 25;   // Velocidad 9600 baudios a 4 MHz
+}
+
+// Manda 1 byte usando int y espera 2 ms a que termine de salir
+void enviar_byte(int dato) {
+    TXREG = dato;
+    __delay_ms(2);
+}
+
+// Manda los 10 bytes directos al DFPlayer según la pista
+void reproducir_mp3(int pista) {
+    if (pista == 0) { // Volumen al 100% (30 de 30 -> 0x1E)
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x06); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x1E); enviar_byte(0xFE); enviar_byte(0xD7); enviar_byte(0xEF);
+    }
+    if (pista == 1) { // 0001.mp3 -> Acierto
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x01); enviar_byte(0xFE); enviar_byte(0xF7); enviar_byte(0xEF);
+    }
+    if (pista == 2) { // 0002.mp3 -> Error
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x02); enviar_byte(0xFE); enviar_byte(0xF6); enviar_byte(0xEF);
+    }
+    if (pista == 3) { // 0003.mp3 -> Racha (5 aciertos)
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x03); enviar_byte(0xFE); enviar_byte(0xF5); enviar_byte(0xEF);
+    }
+    if (pista == 4) { // 0004.mp3 -> Voz: Izquierda
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x04); enviar_byte(0xFE); enviar_byte(0xF4); enviar_byte(0xEF);
+    }
+    if (pista == 5) { // 0005.mp3 -> Voz: En medio
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x05); enviar_byte(0xFE); enviar_byte(0xF3); enviar_byte(0xEF);
+    }
+    if (pista == 6) { // 0006.mp3 -> Voz: Derecha
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x06); enviar_byte(0xFE); enviar_byte(0xF2); enviar_byte(0xEF);
+    }
+    if (pista == 7) { // 0007.mp3 -> Voz: Subir de nivel
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x07); enviar_byte(0xFE); enviar_byte(0xF1); enviar_byte(0xEF);
+    }
+    if (pista == 8) { // 0008.mp3 -> Voz: Hola Elias
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x08); enviar_byte(0xFE); enviar_byte(0xF0); enviar_byte(0xEF);
+    }
+    if (pista == 9) { // 0009.mp3 -> Voz: Modo 1
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x09); enviar_byte(0xFE); enviar_byte(0xEF); enviar_byte(0xEF);
+    }
+    if (pista == 10) { // 0010.mp3 -> Voz: Modo 2
+        enviar_byte(0x7E); enviar_byte(0xFF); enviar_byte(0x06); enviar_byte(0x03); enviar_byte(0x00);
+        enviar_byte(0x00); enviar_byte(0x0A); enviar_byte(0xFE); enviar_byte(0xEE); enviar_byte(0xEF);
+    }
+}
+
+// ==========================================================
+
+void decir_zona(int led) {
+    // En medio: LEDs 1, 2, 3 y 4 (índices 0, 1, 2 y 3)
+    if (led <= 3) { reproducir_mp3(5); }
+
+    // Izquierda: LEDs 5, 7 y 9 (índices 4, 6 y 8)
+    if (led == 4) { reproducir_mp3(4); }
+    if (led == 6) { reproducir_mp3(4); }
+    if (led == 8) { reproducir_mp3(4); }
+
+    // Derecha: LEDs 6, 8 y 10 (índices 5, 7 y 9)
+    if (led == 5) { reproducir_mp3(6); }
+    if (led == 7) { reproducir_mp3(6); }
+    if (led == 9) { reproducir_mp3(6); }
+}
 
 void apagar_leds(void) {
     PORTD = 0x00;
-    RC0 = 0;
-    RC1 = 0;
-    RC6 = 0;
-    RC7 = 0;
-    BUZZER = 0;
+    RC0 = 0; // LED 9
+    RC1 = 0; // LED 10
+}
+
+void encender_todos_leds(void) {
+    PORTD = 0xFF; // LEDs 1 a 8
+    RC0 = 1;      // LED 9
+    RC1 = 1;      // LED 10
+}
+
+void animacion_subir_nivel(void) {
+    apagar_leds();
+    __delay_ms(100);
+
+    int rep = 0;
+    while (rep < 3) {
+        encender_todos_leds();
+        __delay_ms(70);
+        apagar_leds();
+        __delay_ms(70);
+        rep = rep + 1;
+    }
+
+    __delay_ms(80);
+
+    encender_todos_leds();
+    __delay_ms(250);
+    apagar_leds();
+    __delay_ms(150);
 }
 
 void sonido_bien(void) {
-    for (int i = 0; i < 30; i = i + 1) {
-        BUZZER = 1;
-        __delay_ms(1);
-        BUZZER = 0;
-        __delay_ms(1);
-    }
+    racha = racha + 1;
 
-    __delay_ms(30);
-
-    for (int i = 0; i < 40; i = i + 1) {
-        BUZZER = 1;
-        __delay_ms(1);
-        BUZZER = 0;
-        __delay_ms(1);
+    if (racha > 0 && racha % 10 == 0) {
+        reproducir_mp3(7); // Voz de subir de nivel
+        animacion_subir_nivel();
+    } else {
+        if (racha == 5) {
+            reproducir_mp3(3); // Racha de 5
+            __delay_ms(1200);  // Espera a que termine el audio de racha antes de decir la siguiente dirección
+        } else {
+            reproducir_mp3(1); // Acierto
+        }
     }
 }
 
 void sonido_mal(void) {
-    for (int i = 0; i < 25; i = i + 1) {
-        BUZZER = 1;
-        __delay_ms(3);
-        BUZZER = 0;
-        __delay_ms(3);
-    }
-
-    __delay_ms(20);
-
-    for (int i = 0; i < 25; i = i + 1) {
-        BUZZER = 1;
-        __delay_ms(4);
-        BUZZER = 0;
-        __delay_ms(4);
-    }
+    racha = 0;
+    reproducir_mp3(2); // Error en el DFPlayer
 }
 
 void config_int(void) {
@@ -131,11 +180,11 @@ void __interrupt() ISR(void) {
     if (INT0IF == 1) {
         if (RB0 == 0) {
             modo = modo + 1;
-            
-            if (modo > 3) {
+            if (modo > 2) {
                 modo = 0;
             }
-            cambio = 1;
+            boton_modo = 1;
+            racha = 0;
         }
         INT0IF = 0;
     }
@@ -143,150 +192,161 @@ void __interrupt() ISR(void) {
 
 void prender_led(int num) {
     switch(num) {
-        case 0:  RD0 = 1; break;
-        case 1:  RD1 = 1; break;
-        case 2:  RD2 = 1; break;
-        case 3:  RD3 = 1; break;
-        case 4:  RD4 = 1; break;
-        case 5:  RD5 = 1; break;
-        case 6:  RD6 = 1; break;
-        case 7:  RD7 = 1; break;
-        case 8:  RC0 = 1; break;
-        case 9:  RC1 = 1; break;
-        case 10: RC6 = 1; break;
-        case 11: RC7 = 1; break;
+        case 0: RD0 = 1; break;
+        case 1: RD1 = 1; break;
+        case 2: RD2 = 1; break;
+        case 3: RD3 = 1; break;
+        case 4: RD4 = 1; break;
+        case 5: RD5 = 1; break;
+        case 6: RD6 = 1; break;
+        case 7: RD7 = 1; break;
+        case 8: RC0 = 1; break;
+        case 9: RC1 = 1; break;
     }
 }
 
 void apagar_led(int num) {
     switch(num) {
-        case 0:  RD0 = 0; break;
-        case 1:  RD1 = 0; break;
-        case 2:  RD2 = 0; break;
-        case 3:  RD3 = 0; break;
-        case 4:  RD4 = 0; break;
-        case 5:  RD5 = 0; break;
-        case 6:  RD6 = 0; break;
-        case 7:  RD7 = 0; break;
-        case 8:  RC0 = 0; break;
-        case 9:  RC1 = 0; break;
-        case 10: RC6 = 0; break;
-        case 11: RC7 = 0; break;
+        case 0: RD0 = 0; break;
+        case 1: RD1 = 0; break;
+        case 2: RD2 = 0; break;
+        case 3: RD3 = 0; break;
+        case 4: RD4 = 0; break;
+        case 5: RD5 = 0; break;
+        case 6: RD6 = 0; break;
+        case 7: RD7 = 0; break;
+        case 8: RC0 = 0; break;
+        case 9: RC1 = 0; break;
     }
 }
 
 int leer_boton(int num) {
     switch(num) {
-        case 0:  return (RB1 == 0);
-        case 1:  return (RB2 == 0);
-        case 2:  return (RB3 == 0);
-        case 3:  return (RB4 == 0);
-        case 4:  return (RB5 == 0);
-        case 5:  return (RB6 == 0);
-        case 6:  return (RB7 == 0);
-        case 7:  return (RA0 == 0);
-        case 8:  return (RA1 == 0);
-        case 9:  return (RA2 == 0);
-        case 10: return (RA3 == 0);
-        case 11: return (RA5 == 0);
+        case 0: return (RB1 == 0);
+        case 1: return (RB2 == 0);
+        case 2: return (RB3 == 0);
+        case 3: return (RB4 == 0);
+        case 4: return (RB5 == 0);
+        case 5: return (RB6 == 0);
+        case 6: return (RB7 == 0);
+        case 7: return (RA0 == 0);
+        case 8: return (RA1 == 0);
+        case 9: return (RA2 == 0);
     }
     return 0;
 }
 
 void main(void) {
 
-    ADCON1 = 0x0F;
+    ADCON1 = 0x0F; // Entradas digitales
 
-    TRISB0 = 1;
-    TRISB1 = 1;
-    TRISB2 = 1;
-    TRISB3 = 1;
-    TRISB4 = 1;
-    TRISB5 = 1;
-    TRISB6 = 1;
-    TRISB7 = 1;
+    // Botones
+    TRISB0 = 1; // Modo
+    TRISB1 = 1; TRISB2 = 1; TRISB3 = 1; TRISB4 = 1;
+    TRISB5 = 1; TRISB6 = 1; TRISB7 = 1;
+    TRISA0 = 1; TRISA1 = 1; TRISA2 = 1;
 
-    TRISA0 = 1;
-    TRISA1 = 1;
-    TRISA2 = 1;
-    TRISA3 = 1;
-    TRISA5 = 1;
-
-    TRISD0 = 0;
-    TRISD1 = 0;
-    TRISD2 = 0;
-    TRISD3 = 0;
-    TRISD4 = 0;
-    TRISD5 = 0;
-    TRISD6 = 0;
-    TRISD7 = 0;
-
+    // LEDs
+    TRISD = 0x00;
     TRISC0 = 0;
     TRISC1 = 0;
-    TRISC2 = 0;
-    TRISC6 = 0;
-    TRISC7 = 0;
+
+    // Arranca el serial básico y fija volumen al 100% (30) en el DFPlayer
+    iniciar_serial_basico();
+    __delay_ms(600);
+    reproducir_mp3(0); // Volumen 100%
+    __delay_ms(100);
 
     apagar_leds();
     config_int();
 
     while (1) {
 
-        // Modo 0
+        // Modo 0: Reposo
         if (modo == 0) {
             apagar_leds();
-            cambio = 0;
+            boton_modo = 0;
 
-            while (modo == 0 && cambio == 0) {
+            if (saludo_dado == 0) {
+                reproducir_mp3(8); // 0008.mp3 -> "Hola Elias" solo la primera vez
+                saludo_dado = 1;
             }
+
+            while (modo == 0 && boton_modo == 0) {
+                rand(); // Avanza la secuencia mientras está en reposo
+                apagar_leds(); prender_led(8); __delay_ms(150);
+
+                if (modo == 0 && boton_modo == 0) { apagar_leds(); prender_led(6); __delay_ms(150); }
+                if (modo == 0 && boton_modo == 0) { apagar_leds(); prender_led(4); __delay_ms(150); }
+                if (modo == 0 && boton_modo == 0) { apagar_leds(); prender_led(0); prender_led(2); __delay_ms(150); }
+                if (modo == 0 && boton_modo == 0) { apagar_leds(); prender_led(1); prender_led(3); __delay_ms(150); }
+                if (modo == 0 && boton_modo == 0) { apagar_leds(); prender_led(5); __delay_ms(150); }
+                if (modo == 0 && boton_modo == 0) { apagar_leds(); prender_led(7); __delay_ms(150); }
+                if (modo == 0 && boton_modo == 0) { apagar_leds(); prender_led(9); __delay_ms(150); }
+            }
+
+            apagar_leds();
         }
 
-        // Modo 1
+        // Modo 1: 10 LEDs aleatorios con voz por zona
         if (modo == 1) {
-            cambio = 0;
+            boton_modo = 0;
             apagar_leds();
             hay_led_viejo = 0;
 
-            while (modo == 1 && cambio == 0) {
+            reproducir_mp3(9); // 0009.mp3 -> Audio de Modo 1
+            __delay_ms(2000);  // Espera 2 segundos a que termine el audio antes de prender el LED
 
-                do {
-                    led_act = rand() % 12;
-                } while (hay_led_viejo == 1 && led_act == led_viejo);
+            while (modo == 1 && boton_modo == 0) {
 
-                prender_led(led_act);
+                led_act = rand() % 10;
+                while (hay_led_viejo == 1 && led_act == led_viejo) {
+                    led_act = rand() % 10;
+                }
 
-                while (modo == 1 && cambio == 0) {
+                __delay_ms(150);
 
-                    if (leer_boton(led_act) == 1) {
-                        apagar_led(led_act);
-                        sonido_bien();
-                        led_viejo = led_act;
-                        hay_led_viejo = 1;
-                        break;
-                    }
+                if (modo == 1 && boton_modo == 0) {
+                    prender_led(led_act);
+                    decir_zona(led_act);
 
-                    for (int vuelta = 0; vuelta < 12; vuelta = vuelta + 1) {
-                        int prendido = 0;
+                    int nivel_tiempo = racha / 10;
+                    int tiempo_limite = 12000;
 
-                        if (vuelta == led_act) {
-                            prendido = 1;
+                    if (nivel_tiempo == 0) { tiempo_limite = 12000; } // 12 segundos
+                    if (nivel_tiempo == 1) { tiempo_limite = 10000; } // 10 segundos
+                    if (nivel_tiempo == 2) { tiempo_limite = 9000; }  // 9 segundos
+                    if (nivel_tiempo > 2)  { tiempo_limite = 8000; }  // 8 segundos
+
+                    int contador_tiempo = 0;
+                    int respondio = 0;
+
+                    while (respondio == 0 && modo == 1 && boton_modo == 0) {
+                        rand(); // Avanza la secuencia mientras espera respuesta
+
+                        if (leer_boton(led_act) == 1) {
+                            apagar_led(led_act);
+                            sonido_bien();
+                            led_viejo = led_act;
+                            hay_led_viejo = 1;
+                            respondio = 1;
                         }
 
-                        if (hay_led_viejo == 1) {
-                            if (vuelta == led_viejo) {
-                                if (leer_boton(led_viejo) == 1) {
-                                    prendido = 1;
-                                } else {
-                                    hay_led_viejo = 0;
-                                }
-                            }
+                        int i = 0;
+                        while (i < 10) {
+                            int prendido = 0;
+                            if (i == led_act) { prendido = 1; }
+                            if (hay_led_viejo == 1 && i == led_viejo && leer_boton(led_viejo) == 1) { prendido = 1; }
+                            if (prendido == 0 && leer_boton(i) == 1) { sonido_mal(); }
+                            i = i + 1;
                         }
 
-                        if (prendido == 0) {
-                            if (leer_boton(vuelta) == 1) {
-                                sonido_mal();
-                                while (leer_boton(vuelta) == 1 && cambio == 0);
-                            }
+                        __delay_ms(10);
+                        contador_tiempo = contador_tiempo + 10;
+
+                        if (contador_tiempo >= tiempo_limite) {
+                            sonido_mal();
+                            contador_tiempo = 0;
                         }
                     }
                 }
@@ -295,159 +355,98 @@ void main(void) {
             apagar_leds();
         }
 
-        // Modo 2
+        // Modo 2: Escalado de parejas sin sonido de error
         if (modo == 2) {
-            cambio = 0;
+            boton_modo = 0;
             apagar_leds();
+            hay_led_anterior = 0;
 
-            while (modo == 2 && cambio == 0) {
+            reproducir_mp3(10); // 0010.mp3 -> Audio de Modo 2
+            __delay_ms(2000);   // Espera 2 segundos a que termine el audio antes de prender el LED
 
-                led1 = rand() % 12;
+            if (modo == 2 && boton_modo == 0) {
+                led1 = rand() % 10;
                 prender_led(led1);
-                hay_led_viejo = 0;
+                decir_zona(led1);
+            }
 
-                while (modo == 2 && cambio == 0) {
+            while (modo == 2 && boton_modo == 0) {
+                rand(); // Avanza la secuencia mientras espera el primer botón
 
-                    if (leer_boton(led1) == 1) {
-                        break;
-                    }
-
-                    for (int vuelta = 0; vuelta < 12; vuelta = vuelta + 1) {
-                        int prendido = 0;
-
-                        if (vuelta == led1) {
-                            prendido = 1;
-                        }
-
-                        if (prendido == 0) {
-                            if (leer_boton(vuelta) == 1) {
-                                sonido_mal();
-                                while (leer_boton(vuelta) == 1 && cambio == 0);
-                            }
-                        }
-                    }
+                if (leer_boton(led1) == 1) {
+                    break;
                 }
 
-                while (modo == 2 && cambio == 0) {
-                    
-                    do {
-                        led2 = rand() % 12;
-                    } while (led2 == led1);
+                int i = 0;
+                while (i < 10) {
+                    int es_led1 = 0;
+                    if (i == led1) { es_led1 = 1; }
+                    if (es_led1 == 0 && leer_boton(i) == 1) { racha = 0; }
+                    i = i + 1;
+                }
+            }
 
+            while (modo == 2 && boton_modo == 0) {
+
+                int repetido = 1;
+                while (repetido == 1) {
+                    led2 = rand() % 10;
+                    repetido = 0;
+                    if (led2 == led1) { repetido = 1; }
+                    if (hay_led_anterior == 1 && led2 == led_anterior) { repetido = 1; }
+                }
+
+                __delay_ms(150);
+
+                if (modo == 2 && boton_modo == 0) {
                     prender_led(led2);
-                    error = 0;
+                    decir_zona(led2);
 
-                    while (modo == 2 && cambio == 0) {
+                    int nivel_tiempo = racha / 10;
+                    int tiempo_limite = 12000;
 
-                        // Si suelta led1 antes de presionar led2
-                        if (leer_boton(led1) == 0) {
-                            sonido_mal();
-                            apagar_led(led1);
-                            apagar_led(led2);
-                            while (leer_boton(led2) == 1 && cambio == 0);
-                            error = 1;
-                            break;
-                        }
+                    if (nivel_tiempo == 0) { tiempo_limite = 12000; } // 12 segundos
+                    if (nivel_tiempo == 1) { tiempo_limite = 10000; } // 10 segundos
+                    if (nivel_tiempo == 2) { tiempo_limite = 9000; }  // 9 segundos
+                    if (nivel_tiempo > 2)  { tiempo_limite = 8000; }  // 8 segundos
 
-                        // Si presiona led2 correctamente sosteniendo led1
-                        if (leer_boton(led2) == 1) {
+                    int contador_tiempo = 0;
+                    int respondio = 0;
+
+                    while (respondio == 0 && modo == 2 && boton_modo == 0) {
+                        rand(); // Avanza la secuencia mientras espera ambos botones
+
+                        if (leer_boton(led1) == 1 && leer_boton(led2) == 1) {
                             apagar_led(led1);
                             sonido_bien();
-                            led_viejo = led1;
-                            hay_led_viejo = 1;
+
+                            led_anterior = led1;
+                            hay_led_anterior = 1;
                             led1 = led2;
-                            break;
+
+                            if (racha > 0 && racha % 10 == 0) {
+                                prender_led(led1);
+                            }
+
+                            respondio = 1;
                         }
 
-                        // Si presiona un boton equivocado
-                        for (int vuelta = 0; vuelta < 12; vuelta = vuelta + 1) {
-                            int prendido = 0;
-
-                            if (vuelta == led1) {
-                                prendido = 1;
-                            }
-                            if (vuelta == led2) {
-                                prendido = 1;
-                            }
-                            if (hay_led_viejo == 1) {
-                                if (vuelta == led_viejo) {
-                                    if (leer_boton(led_viejo) == 1) {
-                                        prendido = 1;
-                                    } else {
-                                        hay_led_viejo = 0;
-                                    }
-                                }
-                            }
-
-                            if (prendido == 0) {
-                                if (leer_boton(vuelta) == 1) {
-                                    sonido_mal();
-                                    apagar_led(led1);
-                                    apagar_led(led2);
-                                    while (leer_boton(vuelta) == 1 && cambio == 0);
-                                    while (leer_boton(led1) == 1 && cambio == 0);
-                                    error = 1;
-                                    break;
-                                }
-                            }
+                        int i = 0;
+                        while (i < 10) {
+                            int permitido = 0;
+                            if (i == led1) { permitido = 1; }
+                            if (i == led2) { permitido = 1; }
+                            if (hay_led_anterior == 1 && i == led_anterior) { permitido = 1; }
+                            if (permitido == 0 && leer_boton(i) == 1) { racha = 0; }
+                            i = i + 1;
                         }
 
-                        if (error == 1) break;
-                    }
+                        __delay_ms(10);
+                        contador_tiempo = contador_tiempo + 10;
 
-                    if (error == 1) break;
-                }
-            }
-
-            apagar_leds();
-        }
-
-        // Modo 3
-        if (modo == 3) {
-            cambio = 0;
-            apagar_leds();
-            hay_led_viejo = 0;
-
-            while (modo == 3 && cambio == 0) {
-
-                do {
-                    led_act = rand() % 8;
-                } while (hay_led_viejo == 1 && led_act == led_viejo);
-
-                prender_led(led_act);
-
-                while (modo == 3 && cambio == 0) {
-
-                    if (leer_boton(led_act) == 1) {
-                        apagar_led(led_act);
-                        sonido_bien();
-                        led_viejo = led_act;
-                        hay_led_viejo = 1;
-                        break;
-                    }
-
-                    for (int vuelta = 0; vuelta < 12; vuelta = vuelta + 1) {
-                        int prendido = 0;
-
-                        if (vuelta == led_act) {
-                            prendido = 1;
-                        }
-
-                        if (hay_led_viejo == 1) {
-                            if (vuelta == led_viejo) {
-                                if (leer_boton(led_viejo) == 1) {
-                                    prendido = 1;
-                                } else {
-                                    hay_led_viejo = 0;
-                                }
-                            }
-                        }
-
-                        if (prendido == 0) {
-                            if (leer_boton(vuelta) == 1) {
-                                sonido_mal();
-                                while (leer_boton(vuelta) == 1 && cambio == 0);
-                            }
+                        if (contador_tiempo >= tiempo_limite) {
+                            racha = 0;
+                            contador_tiempo = 0;
                         }
                     }
                 }
@@ -455,6 +454,5 @@ void main(void) {
 
             apagar_leds();
         }
-
     }
 }
